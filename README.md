@@ -94,9 +94,9 @@ cp ./build/bin/geth /usr/local/bin/  # Move `geth` to a directory in your PATH
 #### 2. Set Up Your Node Directory
 The required configuration files are located in the `config/` folder. Copy them to your node directory:
 ```
-mkdir -p ~/pandora_node/data  # Create your node directory
-cd ~/pandora_node
-cp ~/pandora-chain/config/* .  # Copy config files into your node directory
+mkdir -p ~/pda_node/data  # Create your node directory
+cd ~/pda_node
+cp ~/pdachain/config/* .  # Copy config files into your node directory
 ```
 
 #### 3. Start the Node
@@ -107,23 +107,22 @@ geth --pandora --config ./config.toml --datadir ./data
 To start a **validator node**:
 
 Prepare your wallet address and the associated keystore file.
-Place your keystore file in `~/pandora_node/data/keystore/`.
+Place your keystore file in `~/pda_node/data/keystore/`.
 Then run the validator node with:
 ```
 geth --pandora --config ./config.toml --datadir ./data --syncmode full -unlock <your_wallet_address> --password <password_file_for_keystore> --mine --allow-insecure-unlock --port 30311 --verbosity 5 --cache 18000
 ```
 
 #### 4. Monitor Your Node
-To monitor the status of your node, check the log file in `~/pandora_node/data/pandora.log` (or the specified log location). When the node starts syncing, you should see output like this:
+To monitor the status of your node, check the log file in `~/pda_node/data/pda.log` (or the specified log location). When the node starts syncing, you should see output like this:
 ```
 t=2023-05-30T17:23:22+0000 lvl=info msg="Imported new chain segment" blocks=1 txs=0 mgas=0.000 elapsed="497.765µs"
 ```
 
-
 #### 5. Interact with Your Node
 To interact with your node using a built-in JavaScript console, start `geth` with the `console` command:
 ```
-geth --config ./config.toml --datadir ./data console
+geth attach ipc://$HOME/pda_node/data/geth.ipc
 ```
 This opens up a JavaScript environment where you can interact with the blockchain using Web3 methods and manage your node through Geth's APIs.
 
