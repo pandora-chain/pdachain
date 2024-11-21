@@ -47,7 +47,7 @@ var CheckpointOracles = map[common.Hash]*CheckpointOracleConfig{
 
 const (
 	//Community fork, validator will be voted by sysytem validator contract
-	CommunitySwapBlockMain = 999999999
+	CommunitySwapBlockMain = 2903040 - 1
 	CommunitySwapBlockDev  = 82157 // dev net
 	CommunitySwapBlockTest = 500   // test net
 
@@ -634,8 +634,12 @@ func (c *ChainConfig) IsUnderCommunitySwap(num *big.Int) bool {
 	return isForked(c.GetCommunitySwapBlock(), num)
 }
 
-func (c *ChainConfig) IsOnValidator(num *big.Int) bool {
+func (c *ChainConfig) IsOnValidatorDeployForkBlock(num *big.Int) bool {
 	return configNumEqual(c.GetValidatorBlock(), num)
+}
+
+func (c *ChainConfig) IsOnValidatorActivityForkBlock(num *big.Int) bool {
+	return configNumEqual(c.GetCommunitySwapBlock(), num)
 }
 
 func (c *ChainConfig) GetCommunitySwapBlock() *big.Int {
