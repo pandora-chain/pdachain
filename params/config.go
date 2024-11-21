@@ -47,7 +47,7 @@ var CheckpointOracles = map[common.Hash]*CheckpointOracleConfig{
 
 const (
 	//Community fork, validator will be voted by sysytem validator contract
-	CommunitySwapBlockMain = 2903040 - 1
+	CommunitySwapBlockMain = 2903050
 	CommunitySwapBlockDev  = 82157 // dev net
 	CommunitySwapBlockTest = 500   // test net
 

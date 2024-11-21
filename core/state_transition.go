@@ -359,7 +359,10 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 
 			blockFeeRate := new(big.Int).SetUint64(st.evm.ChainConfig().Parlia.BlockFeeRate)
 
-			blockFee := new(big.Int).Div(new(big.Int).Mul(totalFee, blockFeeRate), new(big.Int).SetUint64(1e12))
+			blockFee := new(big.Int).Div(
+				new(big.Int).Mul(totalFee, blockFeeRate),
+				new(big.Int).SetUint64(1e12),
+			)
 			coinBaseFee := new(big.Int).Sub(totalFee, blockFee)
 
 			st.state.AddBalance(st.evm.Context.Coinbase, coinBaseFee)
