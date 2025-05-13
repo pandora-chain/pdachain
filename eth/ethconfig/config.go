@@ -18,6 +18,7 @@
 package ethconfig
 
 import (
+	"github.com/ethereum/go-ethereum/consensus/anchor"
 	"math/big"
 	"os"
 	"os/user"
@@ -234,6 +235,9 @@ type Config struct {
 func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, config *ethash.Config, notify []string, noverify bool, db ethdb.Database, ee *ethapi.PublicBlockChainAPI, genesisHash common.Hash) consensus.Engine {
 	if chainConfig.Parlia != nil {
 		return parlia.New(chainConfig, db, ee, genesisHash)
+	}
+	if chainConfig.Anchor != nil {
+		return anchor.New(chainConfig, db, ee, genesisHash)
 	}
 	// If proof-of-authority is requested, set it up
 	var engine consensus.Engine

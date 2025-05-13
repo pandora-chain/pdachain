@@ -9,6 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/farms/contract"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/systemcontracts"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -54,9 +56,10 @@ type PoolDistribution struct {
 
 	isFork0815         bool
 	blockBalanceCaches map[common.Address]*big.Int
+	anchorClient       *ethclient.Client
 }
 
-func newTokenHolderDistribution(state *state.StateDB, ethAPI *ethapi.PublicBlockChainAPI, farmContract *contract.FarmContract, addressTreeContract *contract.AddressTreeContract, pool common.Address, poolInfo *contract.PoolInfo, isFork0815 bool) *PoolDistribution {
+func newTokenHolderDistribution(state *state.StateDB, ethAPI *ethapi.PublicBlockChainAPI, farmContract *contract.FarmContract, addressTreeContract *contract.AddressTreeContract, pool common.Address, poolInfo *contract.PoolInfo, isFork0815 bool, anchorClient *ethclient.Client) *PoolDistribution {
 
 	ercABI, err := abi.JSON(strings.NewReader(systemcontracts.ERC20ABI))
 	if err != nil {
@@ -91,6 +94,7 @@ func newTokenHolderDistribution(state *state.StateDB, ethAPI *ethapi.PublicBlock
 		rewardPerSharesSlot:     &map[common.Address]common.Hash{},
 		isFork0815:              isFork0815,
 		blockBalanceCaches:      map[common.Address]*big.Int{},
+		anchorClient:            anchorClient,
 	}
 
 	for _, address := range poolInfo.GetRewardTokens() {
@@ -114,7 +118,7 @@ func newTokenHolderDistribution(state *state.StateDB, ethAPI *ethapi.PublicBlock
 	return r
 }
 
-func (d *PoolDistribution) putTransferEventLog(blockHash common.Hash, from common.Address, to common.Address, amount *big.Int) error {
+func (d *PoolDistribution) putTransferEventLog(header *types.Header, blockHash common.Hash, from common.Address, to common.Address, amount *big.Int) error {
 
 	if from == to {
 		return nil
@@ -126,7 +130,7 @@ func (d *PoolDistribution) putTransferEventLog(blockHash common.Hash, from commo
 			return err
 		}
 		fromCurrentBalance := new(big.Int).Sub(fromOriginBalance, amount)
-		if err := d.updateAccountBalance(from, fromOriginBalance, fromCurrentBalance); err != nil {
+		if err := d.updateAccountBalance(header, from, fromOriginBalance, fromCurrentBalance); err != nil {
 			return err
 		}
 	}
@@ -137,7 +141,7 @@ func (d *PoolDistribution) putTransferEventLog(blockHash common.Hash, from commo
 			return err
 		}
 		toCurrentBalance := new(big.Int).Add(toOriginBalance, amount)
-		if err := d.updateAccountBalance(to, toOriginBalance, toCurrentBalance); err != nil {
+		if err := d.updateAccountBalance(header, to, toOriginBalance, toCurrentBalance); err != nil {
 			return err
 		}
 	}
@@ -265,7 +269,7 @@ func (d *PoolDistribution) balanceOf(blockHash common.Hash, account common.Addre
 	return ret0, nil
 }
 
-func (d *PoolDistribution) updateAccountBalance(from common.Address, originAmount *big.Int, currentAmount *big.Int) error {
+func (d *PoolDistribution) updateAccountBalance(header *types.Header, from common.Address, originAmount *big.Int, currentAmount *big.Int) error {
 
 	d.blockBalanceCaches[from] = currentAmount
 
@@ -316,14 +320,29 @@ func (d *PoolDistribution) updateAccountBalance(from common.Address, originAmoun
 		}
 	}
 
-	if err := d.updateAchievement(from, originAmount, currentAmount); err != nil {
+	if d.anchorClient != nil {
+		parentUpdateBlock := d.farmContract.GetParentLastUpdateBlock(d.poolAddress, from)
+		var err error
+		updatedCount := 0
+		if parentUpdateBlock == nil || parentUpdateBlock.Uint64() == 0 {
+			updatedCount, err = d.updateAchievement(from, big.NewInt(0), currentAmount)
+		} else {
+			updatedCount, err = d.updateAchievement(from, originAmount, currentAmount)
+		}
+		if err != nil {
+			return err
+		}
+		if updatedCount > 0 {
+			d.farmContract.SetParentLastUpdateBlock(d.poolAddress, from, header.Number)
+		}
+	} else if _, err := d.updateAchievement(from, originAmount, currentAmount); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (d *PoolDistribution) updateAchievement(from common.Address, originAmount *big.Int, currentAmount *big.Int) error {
+func (d *PoolDistribution) updateAchievement(from common.Address, originAmount *big.Int, currentAmount *big.Int) (updateParentCount int, e error) {
 
 	start := time.Now()
 	parentCount := 0
@@ -336,10 +355,16 @@ func (d *PoolDistribution) updateAchievement(from common.Address, originAmount *
 	}
 
 	forFathersList := make([]common.Address, TreeHeightMaxLimit)
+
+	var err error
 	parent := from
 	for i := 0; i < len(forFathersList) && parent != common.HexToAddress(NullAddress) && parent != common.HexToAddress(BurnAddress); i++ {
 		forFathersList[i] = parent
-		parent = d.addressTreeContract.ParentOf(parent)
+
+		parent, err = d.addressTreeContract.ParentOf(parent)
+		if err != nil {
+			return 0, err
+		}
 		parentCount++
 	}
 
@@ -360,7 +385,10 @@ func (d *PoolDistribution) updateAchievement(from common.Address, originAmount *
 		__cpuTimes["userInfoOf"] += time.Since(__userInfoOfStart).Microseconds()
 
 		__childrenOfStart := time.Now()
-		children := d.addressTreeContract.ChildrenOf(parent)
+		children, err := d.addressTreeContract.ChildrenOf(parent)
+		if err != nil {
+			return childIndex, err
+		}
 		__cpuTimes["childrenOf"] += time.Since(__childrenOfStart).Microseconds()
 
 		childrenHolds := parentInfo.GetChildrenHoldAmount()
@@ -374,7 +402,13 @@ func (d *PoolDistribution) updateAchievement(from common.Address, originAmount *
 		// Add origin amount
 		for i, c := range *children {
 			if c == child {
-				childrenHolds[i] = new(big.Int).Add(currentAmount, new(big.Int).Sub(childrenHolds[i], originAmount))
+				childrenHolds[i] = new(big.Int).Add(
+					currentAmount,
+					new(big.Int).Sub(
+						childrenHolds[i],
+						originAmount,
+					),
+				)
 				break
 			}
 		}
@@ -434,7 +468,7 @@ func (d *PoolDistribution) updateAchievement(from common.Address, originAmount *
 		start = time.Now()
 	}
 
-	return nil
+	return parentCount - 1, nil
 }
 
 func communityPower(holdAmounts *[]*big.Int) *big.Int {

@@ -72,6 +72,7 @@ var (
 					utils.AncientFlag,
 					utils.TestnetFlag,
 					utils.PandoraFlag,
+					utils.AnchorFlag,
 					utils.CacheTrieJournalFlag,
 					utils.BloomFilterSizeFlag,
 					utils.TriesInMemoryFlag,
@@ -126,6 +127,7 @@ so it's very necessary to do block data prune, this feature will handle it.
 					utils.AncientFlag,
 					utils.TestnetFlag,
 					utils.PandoraFlag,
+					utils.AnchorFlag,
 				},
 				Description: `
 geth snapshot verify-state <state-root>
@@ -146,6 +148,7 @@ In other words, this command does the snapshot to trie conversion.
 					utils.AncientFlag,
 					utils.TestnetFlag,
 					utils.PandoraFlag,
+					utils.AnchorFlag,
 				},
 				Description: `
 will prune all historical trie state data except genesis block.
@@ -170,6 +173,7 @@ the trie clean cache with default directory will be deleted.
 					utils.AncientFlag,
 					utils.TestnetFlag,
 					utils.PandoraFlag,
+					utils.AnchorFlag,
 				},
 				Description: `
 geth snapshot traverse-state <state-root>
@@ -191,6 +195,7 @@ It's also usable without snapshot enabled.
 					utils.AncientFlag,
 					utils.TestnetFlag,
 					utils.PandoraFlag,
+					utils.AnchorFlag,
 				},
 				Description: `
 geth snapshot traverse-rawstate <state-root>
@@ -213,6 +218,7 @@ It's also usable without snapshot enabled.
 					utils.AncientFlag,
 					utils.TestnetFlag,
 					utils.PandoraFlag,
+					utils.AnchorFlag,
 					utils.ExcludeCodeFlag,
 					utils.ExcludeStorageFlag,
 					utils.StartKeyFlag,

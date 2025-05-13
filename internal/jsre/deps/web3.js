@@ -5334,6 +5334,13 @@ var methods = function () {
         inputFormatter: [null, utils.toHex, formatters.inputDefaultBlockNumberFormatter]
     });
 
+    var getRawStorageAt = new Method({
+        name: 'getStorageAt',
+        call: 'eth_getStorageAt',
+        params: 3,
+        inputFormatter: [null, utils.toHex, formatters.inputDefaultBlockNumberFormatter]
+    });
+
     var getCode = new Method({
         name: 'getCode',
         call: 'eth_getCode',
@@ -5507,6 +5514,7 @@ var methods = function () {
     return [
         getBalance,
         getStorageAt,
+        getRawStorageAt,
         getCode,
         getBlock,
         getUncle,

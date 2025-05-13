@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/systemcontracts"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -28,6 +29,7 @@ type Farm struct {
 	farmABI             abi.ABI
 	transferABI         abi.ABI
 	rTransferValue      *big.Int
+	anchorClient        *ethclient.Client
 }
 
 type DistributeRewardEvent struct {
@@ -43,7 +45,7 @@ type ERC20TransferEvent struct {
 	amount *big.Int
 }
 
-func NewFarm(state *state.StateDB, ethAPI *ethapi.PublicBlockChainAPI, farmContractAddress common.Address, addressTreeContractAddress common.Address, makeNodeValue *big.Int) *Farm {
+func NewFarm(state *state.StateDB, ethAPI *ethapi.PublicBlockChainAPI, farmContractAddress common.Address, addressTreeContractAddress common.Address, makeNodeValue *big.Int, anchorClient *ethclient.Client, treeVersionBlockNumber uint64) *Farm {
 
 	farmABI, err := abi.JSON(strings.NewReader(systemcontracts.FarmABI))
 	if err != nil {
@@ -59,15 +61,19 @@ func NewFarm(state *state.StateDB, ethAPI *ethapi.PublicBlockChainAPI, farmContr
 		makeNodeValue = new(big.Int).Mul(big.NewInt(DefaultMakeRelationTransferValue), big.NewInt(params.Ether))
 	}
 
+	addressTreeContract := contract.NewAddressTreeContract(state, addressTreeContractAddress, anchorClient, treeVersionBlockNumber)
+	farmContract := contract.NewFarmContract(state, farmContractAddress, anchorClient != nil)
+
 	farm := &Farm{
 		contractAddress:     farmContractAddress,
 		state:               state,
 		ethAPI:              ethAPI,
-		addressTreeContract: contract.NewAddressTreeContract(state, addressTreeContractAddress),
-		farmContract:        contract.NewFarmContract(state, farmContractAddress),
+		addressTreeContract: addressTreeContract,
+		farmContract:        farmContract,
 		farmABI:             farmABI,
 		transferABI:         transferABI,
 		rTransferValue:      makeNodeValue,
+		anchorClient:        anchorClient,
 	}
 
 	return farm
@@ -100,8 +106,22 @@ func (f *Farm) FinalizeBlock(chain core.ChainContext, chainConfig *params.ChainC
 		}
 		child := tx.To()
 
-		if child != nil && f.addressTreeContract.DepthOf(*child).Cmp(common.Big0) == 0 && f.state.GetCodeSize(parent) == 0 && f.state.GetCodeSize(*child) == 0 && tx.Value().Cmp(f.rTransferValue) >= 0 {
-			if f.addressTreeContract.DepthOf(parent).Cmp(common.Big0) > 0 {
+		var childDepth *big.Int
+		if child != nil {
+			childDepth, err = f.addressTreeContract.DepthOf(*child)
+			if err != nil {
+				return err
+			}
+		}
+
+		if f.anchorClient == nil && child != nil && childDepth.Cmp(common.Big0) == 0 && f.state.GetCodeSize(parent) == 0 && f.state.GetCodeSize(*child) == 0 && tx.Value().Cmp(f.rTransferValue) >= 0 {
+
+			parentDepth, err := f.addressTreeContract.DepthOf(parent)
+			if err != nil {
+				return err
+			}
+
+			if parentDepth.Cmp(common.Big0) > 0 {
 				if err := f.addressTreeContract.MakeRelation(chain, header, chainConfig, parent, *child); err != nil {
 					f.state.RevertToSnapshot(snap)
 					log.Warn("FarmHandleBlock - HandleAddressTree Error", "number", header.Number, "hash", header.Hash())
@@ -116,7 +136,7 @@ func (f *Farm) FinalizeBlock(chain core.ChainContext, chainConfig *params.ChainC
 
 				for poolAddress, info := range poolInfos {
 					if poolHolderDistributions[poolAddress] == nil {
-						poolHolderDistributions[poolAddress] = newTokenHolderDistribution(f.state, f.ethAPI, f.farmContract, f.addressTreeContract, poolAddress, info, isFork0815)
+						poolHolderDistributions[poolAddress] = newTokenHolderDistribution(f.state, f.ethAPI, f.farmContract, f.addressTreeContract, poolAddress, info, isFork0815, f.anchorClient)
 					}
 					dst := poolHolderDistributions[poolAddress]
 					if balance, err := dst.balanceOf(header.ParentHash, *child); err != nil {
@@ -125,7 +145,7 @@ func (f *Farm) FinalizeBlock(chain core.ChainContext, chainConfig *params.ChainC
 						return err
 					} else {
 						if balance.Cmp(big.NewInt(0)) > 0 {
-							if err := dst.updateAchievement(*child, big.NewInt(0), balance); err != nil {
+							if _, err := dst.updateAchievement(*child, big.NewInt(0), balance); err != nil {
 								f.state.RevertToSnapshot(snap)
 								log.Warn("FarmHandleBlock - HandleUpdateAchievement Error", "number", header.Number, "hash", header.Hash())
 								return err
@@ -137,16 +157,18 @@ func (f *Farm) FinalizeBlock(chain core.ChainContext, chainConfig *params.ChainC
 		}
 
 		// has transaction call address contract importRelation methods
-		isImportRelationCall := f.addressTreeContract.IsImportTransaction(tx)
+		isImportRelationCall := f.anchorClient == nil && f.addressTreeContract.IsImportTransaction(tx)
 		for _, l := range receipt.Logs {
 			// keccak256("Transfer(address,address,uint256)")
 			if l.Topics[0] == common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef") {
 				if p := poolInfos[l.Address]; p != nil {
 					if poolHolderDistributions[l.Address] == nil {
-						poolHolderDistributions[l.Address] = newTokenHolderDistribution(f.state, f.ethAPI, f.farmContract, f.addressTreeContract, l.Address, p, isFork0815)
+						poolHolderDistributions[l.Address] = newTokenHolderDistribution(f.state, f.ethAPI, f.farmContract, f.addressTreeContract, l.Address, p, isFork0815, f.anchorClient)
 					}
 					dst := poolHolderDistributions[l.Address]
+
 					if err := dst.putTransferEventLog(
+						header,
 						header.ParentHash,
 						common.BytesToAddress(l.Topics[1].Bytes()),
 						common.BytesToAddress(l.Topics[2].Bytes()),
@@ -157,14 +179,14 @@ func (f *Farm) FinalizeBlock(chain core.ChainContext, chainConfig *params.ChainC
 						return err
 					}
 				}
-			} else if isImportRelationCall && f.addressTreeContract.IsAddressAddedLog(l) {
+			} else if isImportRelationCall && f.addressTreeContract.IsAddressAddedLog(l) && f.anchorClient == nil {
 				parent := common.BytesToAddress(l.Topics[1].Bytes())
 				child := common.BytesToAddress(l.Topics[2].Bytes())
 				_ = f.addressTreeContract.AppendChild(parent, child)
 
 				for poolAddress, info := range poolInfos {
 					if poolHolderDistributions[poolAddress] == nil {
-						poolHolderDistributions[poolAddress] = newTokenHolderDistribution(f.state, f.ethAPI, f.farmContract, f.addressTreeContract, poolAddress, info, isFork0815)
+						poolHolderDistributions[poolAddress] = newTokenHolderDistribution(f.state, f.ethAPI, f.farmContract, f.addressTreeContract, poolAddress, info, isFork0815, f.anchorClient)
 					}
 					dst := poolHolderDistributions[poolAddress]
 					if balance, err := dst.balanceOf(header.ParentHash, child); err != nil {
@@ -173,7 +195,7 @@ func (f *Farm) FinalizeBlock(chain core.ChainContext, chainConfig *params.ChainC
 						return err
 					} else {
 						if balance.Cmp(big.NewInt(0)) > 0 {
-							if err := dst.updateAchievement(child, big.NewInt(0), balance); err != nil {
+							if _, err := dst.updateAchievement(child, big.NewInt(0), balance); err != nil {
 								f.state.RevertToSnapshot(snap)
 								log.Warn("FarmHandleBlock - HandleUpdateAchievement Error", "number", header.Number, "hash", header.Hash())
 								return err
@@ -188,7 +210,7 @@ func (f *Farm) FinalizeBlock(chain core.ChainContext, chainConfig *params.ChainC
 				communityReward := new(big.Int).SetBytes(l.Data[32:64])
 
 				if poolHolderDistributions[poolAddress] == nil {
-					poolHolderDistributions[poolAddress] = newTokenHolderDistribution(f.state, f.ethAPI, f.farmContract, f.addressTreeContract, poolAddress, poolInfos[poolAddress], isFork0815)
+					poolHolderDistributions[poolAddress] = newTokenHolderDistribution(f.state, f.ethAPI, f.farmContract, f.addressTreeContract, poolAddress, poolInfos[poolAddress], isFork0815, f.anchorClient)
 				}
 				dst := poolHolderDistributions[poolAddress]
 				dst.UpdateRewardPerShares(rewardToken, holderReward, communityReward)

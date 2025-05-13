@@ -170,6 +170,13 @@ func (ec *EthereumClient) GetStorageAt(ctx *Context, account *Address, key *Hash
 	return ec.client.StorageAt(ctx.context, account.address, key.hash, big.NewInt(number))
 }
 
+func (ec *EthereumClient) GetRawStorageAt(ctx *Context, account *Address, key *Hash, number int64) (storage []byte, _ error) {
+	if number < 0 {
+		return ec.client.RawStorageAt(ctx.context, account.address, key.hash, nil)
+	}
+	return ec.client.RawStorageAt(ctx.context, account.address, key.hash, big.NewInt(number))
+}
+
 // GetCodeAt returns the contract code of the given account.
 // The block number can be <0, in which case the code is taken from the latest known block.
 func (ec *EthereumClient) GetCodeAt(ctx *Context, account *Address, number int64) (code []byte, _ error) {

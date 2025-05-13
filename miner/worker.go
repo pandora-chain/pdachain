@@ -19,6 +19,7 @@ package miner
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/consensus/anchor"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -426,6 +427,19 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 					continue
 				}
 			}
+
+			if a, ok := w.engine.(*anchor.Anchor); ok {
+				signedRecent, err := a.SignRecently(w.chain, head.Block)
+				if err != nil {
+					log.Info("Not allowed to propose block", "err", err)
+					continue
+				}
+				if signedRecent {
+					log.Info("Signed recently, must wait")
+					continue
+				}
+			}
+
 			commit(commitInterruptNewHead)
 
 		case <-timer.C:
@@ -491,6 +505,9 @@ func (w *worker) mainLoop() {
 		case ev := <-w.chainSideCh:
 			// Short circuit for duplicate side blocks
 			if _, ok := w.engine.(*parlia.Parlia); ok {
+				continue
+			}
+			if _, ok := w.engine.(*anchor.Anchor); ok {
 				continue
 			}
 			if _, exist := w.localUncles[ev.Block.Hash()]; exist {
@@ -854,7 +871,7 @@ LOOP:
 			txs.Pop()
 			continue
 		}
-		//todo 黑名单校验
+		//todo blacklist verification
 
 		// Start executing the transaction
 		env.state.Prepare(tx.Hash(), env.tcount)

@@ -14,14 +14,16 @@ const (
 )
 
 type FarmContract struct {
-	address common.Address
-	state   *state.StateDB
+	address     common.Address
+	state       *state.StateDB
+	isAnchorNet bool
 }
 
-func NewFarmContract(state *state.StateDB, address common.Address) *FarmContract {
+func NewFarmContract(state *state.StateDB, address common.Address, isAnchorNet bool) *FarmContract {
 	return &FarmContract{
-		state:   state,
-		address: address,
+		state:       state,
+		address:     address,
+		isAnchorNet: isAnchorNet,
 	}
 }
 
@@ -78,4 +80,49 @@ func (fc *FarmContract) SetCommunityAccRewardPerShare(pool common.Address, rewar
 	harsher.Sum(slot2[:0])
 
 	fc.state.SetState(fc.address, slot2, common.BigToHash(accRewardPerShare))
+}
+
+func (fc *FarmContract) GetParentLastUpdateBlock(pool common.Address, account common.Address) *big.Int {
+	if !fc.isAnchorNet {
+		panic("GetLastUpdateBlock method only work AnchorNet")
+	}
+
+	var slot1 common.Hash
+	var slot2 common.Hash
+
+	harsher := sha3.NewLegacyKeccak256()
+	harsher.Write(common.LeftPadBytes(pool.Bytes(), 32))
+	harsher.Write(common.LeftPadBytes(common.IntToSlot(FarmMemberSlotLastUpdateBlockOf).Bytes(), 32))
+	harsher.Sum(slot1[:0])
+	harsher.Reset()
+
+	harsher.Write(common.LeftPadBytes(account.Bytes(), 32))
+	harsher.Write(common.LeftPadBytes(slot1.Bytes(), 32))
+	harsher.Sum(slot2[:0])
+	harsher.Reset()
+
+	lastUpdateBlock := fc.state.GetState(fc.address, slot2)
+	return new(big.Int).SetBytes(lastUpdateBlock.Bytes())
+}
+
+func (fc *FarmContract) SetParentLastUpdateBlock(pool common.Address, account common.Address, number *big.Int) {
+	if !fc.isAnchorNet {
+		panic("GetLastUpdateBlock method only work AnchorNet")
+	}
+
+	var slot1 common.Hash
+	var slot2 common.Hash
+
+	harsher := sha3.NewLegacyKeccak256()
+	harsher.Write(common.LeftPadBytes(pool.Bytes(), 32))
+	harsher.Write(common.LeftPadBytes(common.IntToSlot(FarmMemberSlotLastUpdateBlockOf).Bytes(), 32))
+	harsher.Sum(slot1[:0])
+	harsher.Reset()
+
+	harsher.Write(common.LeftPadBytes(account.Bytes(), 32))
+	harsher.Write(common.LeftPadBytes(slot1.Bytes(), 32))
+	harsher.Sum(slot2[:0])
+	harsher.Reset()
+
+	fc.state.SetState(fc.address, slot2, common.BigToHash(number))
 }

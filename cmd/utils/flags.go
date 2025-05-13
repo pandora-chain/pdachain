@@ -18,8 +18,16 @@
 package utils
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/anchor_network"
+	"github.com/ethereum/go-ethereum/core/systemcontracts"
+	"github.com/ethereum/go-ethereum/core/systemcontracts/parlia"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"io"
 	"io/ioutil"
 	"math"
@@ -183,6 +191,18 @@ var (
 	TestnetFlag = cli.BoolFlag{
 		Name:  "testnet",
 		Usage: "testnet network: pre-configured proof-of-authority test network",
+	}
+	AnchorFlag = cli.BoolFlag{
+		Name:  "anchor",
+		Usage: "Anchor layer2 network: pre-configured layer2 of pandora network",
+	}
+	AnchorChainIdFlag = cli.Uint64Flag{
+		Name:  "anchor.chainId",
+		Usage: "Explicitly set anchor layer2 network chain id",
+	}
+	AnchorIPCPathFlag = cli.StringFlag{
+		Name:  "anchor.ipcPath",
+		Usage: "Path to the anchor parent network work IPC path",
 	}
 	DeveloperFlag = cli.BoolFlag{
 		Name:  "dev",
@@ -901,6 +921,8 @@ func MakeDataDir(ctx *cli.Context) string {
 			return filepath.Join(path, "testnet")
 		} else if ctx.GlobalBool(PandoraFlag.Name) {
 			return filepath.Join(path, "pandora")
+		} else if ctx.GlobalBool(AnchorFlag.Name) && ctx.GlobalIsSet(AnchorChainIdFlag.Name) {
+			return filepath.Join(path, "anchor-", fmt.Sprintf("%d", ctx.GlobalUint64(AnchorChainIdFlag.Name)))
 		}
 		return path
 	}
@@ -1360,10 +1382,19 @@ func setDataDir(ctx *cli.Context, cfg *node.Config) {
 		} else {
 			cfg.DataDir = filepath.Join(node.DefaultDataDir(), "pandora")
 		}
-
 		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "pandora")
-	}
 
+	case ctx.GlobalBool(AnchorFlag.Name) && ctx.GlobalIsSet(AnchorChainIdFlag.Name) && cfg.DataDir == node.DefaultDataDir():
+		dirName := fmt.Sprintf("anchor-%d", ctx.GlobalUint64(AnchorChainIdFlag.Name))
+		legacyPath := filepath.Join(node.DefaultDataDir(), dirName)
+		if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+			log.Warn("Using the deprecated `anchor` datadir. Future versions will store the AnchorLayer2 chain in `anchor`.")
+			cfg.DataDir = legacyPath
+		} else {
+			cfg.DataDir = filepath.Join(node.DefaultDataDir(), dirName)
+		}
+		cfg.DataDir = filepath.Join(node.DefaultDataDir(), dirName)
+	}
 }
 
 func setGPO(ctx *cli.Context, cfg *gasprice.Config, light bool) {
@@ -1554,7 +1585,7 @@ func CheckExclusive(ctx *cli.Context, args ...interface{}) {
 // SetEthConfig applies eth-related command line flags to the config.
 func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	// Avoid conflicting network flags
-	CheckExclusive(ctx, PandoraFlag, DeveloperFlag, TestnetFlag)
+	CheckExclusive(ctx, PandoraFlag, AnchorFlag, DeveloperFlag, TestnetFlag)
 	CheckExclusive(ctx, LightServeFlag, SyncModeFlag, "light")
 	CheckExclusive(ctx, DeveloperFlag, ExternalSignerFlag) // Can't use both ephemeral unlocked and external signer
 	if ctx.GlobalString(GCModeFlag.Name) == "archive" && ctx.GlobalUint64(TxLookupLimitFlag.Name) != 0 {
@@ -1736,12 +1767,74 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		}
 		cfg.Genesis = core.DefaultGenesisBlock()
 		SetDNSDiscoveryDefaults(cfg, params.PDANetGenesisHash)
+
 	case ctx.GlobalBool(TestnetFlag.Name):
 		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 20241104
 		}
 		cfg.Genesis = core.DefaultTestNetGenesisBlock()
 		SetDNSDiscoveryDefaults(cfg, params.TestnetGenesisHash)
+
+	case ctx.GlobalBool(AnchorFlag.Name):
+		ipcCli, err := ethclient.Dial(ctx.GlobalString(AnchorIPCPathFlag.Name))
+		defer ipcCli.Close()
+
+		if err != nil {
+			Fatalf("Failed to create dial: %s", ctx.GlobalString(AnchorIPCPathFlag.Name))
+		}
+		mainNetBlockNumber, err := ipcCli.BlockNumber(context.TODO())
+
+		anchorAbi, err := abi.JSON(strings.NewReader(parlia.AnchorNetworksABI))
+		callCtx, cancel := context.WithCancel(context.TODO())
+		defer cancel() // cancel when we are finished consuming integers
+
+		method := "anchorNetworkOfChainID"
+		data, err := anchorAbi.Pack(method, big.NewInt(int64(ctx.GlobalUint64(AnchorChainIdFlag.Name))))
+		if err != nil {
+			log.Error("Unable to pack tx for blockFeeReceiver", "error", err)
+			Fatalf("Failed to get anchor net info %v", err)
+		}
+
+		// call
+		msgData := (hexutil.Bytes)(data)
+		toAddress := common.HexToAddress(systemcontracts.PDANetAnchorNetworksManagerContractAddress)
+		result, err := ipcCli.CallContract(
+			callCtx,
+			ethereum.CallMsg{
+				From:     common.HexToAddress("0x0000000000000000000000000000000000000000"),
+				To:       &toAddress,
+				Gas:      uint64(math.MaxUint64 / 2),
+				GasPrice: nil,
+				Data:     msgData,
+			},
+			big.NewInt(int64(mainNetBlockNumber)),
+		)
+		if err != nil {
+			Fatalf("Failed to get anchor net info %v", err)
+		}
+
+		var info anchor_network.AnchorNetworkInfo
+		if err := anchorAbi.UnpackIntoInterface(&info, method, result); err != nil {
+			Fatalf("Failed to get anchor net info %v", err)
+		}
+
+		blockHeight, err := ipcCli.BlockNumber(context.TODO())
+		if err != nil {
+			Fatalf("Failed to Retrieve Anchor Network Height: %v", err)
+		}
+
+		if info.ForkBlockNumber.Uint64() > blockHeight {
+			Fatalf("Anchor Network Block Height Below Startup Threshold ForkBlockNumber:%d", info.ForkBlockNumber.Uint64())
+		}
+
+		forkBlock, err := ipcCli.BlockByNumber(context.TODO(), info.ForkBlockNumber)
+		if err != nil {
+			Fatalf("Failed to get anchor net info %v", err)
+		}
+
+		cfg.NetworkId = info.ChainID.Uint64()
+		cfg.Genesis = core.DefaultAnchorNetGenesisBlock(forkBlock.Time(), forkBlock.Hash(), ctx.GlobalString(AnchorIPCPathFlag.Name), info)
+
 	case ctx.GlobalBool(DeveloperFlag.Name):
 		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 1337
@@ -1795,13 +1888,14 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		if !ctx.GlobalIsSet(MinerGasPriceFlag.Name) {
 			cfg.Miner.GasPrice = big.NewInt(1)
 		}
-	default:
-		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
-			cfg.NetworkId = 140705
-		}
-		cfg.Genesis = core.DefaultGenesisBlock()
-		SetDNSDiscoveryDefaults(cfg, params.PDANetGenesisHash)
 	}
+	//default:
+	//	if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
+	//		cfg.NetworkId = 140705
+	//	}
+	//	cfg.Genesis = core.DefaultGenesisBlock()
+	//	SetDNSDiscoveryDefaults(cfg, params.PDANetGenesisHash)
+	//}
 }
 
 // SetDNSDiscoveryDefaults configures DNS discovery with the given URL if
