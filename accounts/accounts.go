@@ -40,6 +40,7 @@ const (
 	MimetypeTypedData         = "data/typed"
 	MimetypeClique            = "application/x-clique-header"
 	MimetypeParlia            = "application/x-parlia-header"
+	MimetypeAnchor            = "application/x-anchor-header"
 	MimetypeTextPlain         = "text/plain"
 )
 

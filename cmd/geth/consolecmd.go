@@ -142,6 +142,13 @@ func remoteConsole(ctx *cli.Context) error {
 				} else {
 					path = filepath.Join(path, "pandora")
 				}
+			} else if ctx.GlobalBool(utils.AnchorFlag.Name) {
+				legacyPath := filepath.Join(path, "anchor")
+				if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+					path = legacyPath
+				} else {
+					path = filepath.Join(path, "anchor")
+				}
 			}
 		}
 		endpoint = fmt.Sprintf("%s/geth.ipc", path)

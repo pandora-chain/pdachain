@@ -152,6 +152,9 @@ var (
 		utils.NodeKeyHexFlag,
 		utils.DNSDiscoveryFlag,
 		utils.PandoraFlag,
+		utils.AnchorFlag,
+		utils.AnchorChainIdFlag,
+		utils.AnchorIPCPathFlag,
 		utils.DeveloperFlag,
 		utils.DeveloperPeriodFlag,
 		utils.DeveloperGasLimitFlag,
@@ -286,6 +289,9 @@ func prepare(ctx *cli.Context) {
 	case ctx.GlobalIsSet(utils.PandoraFlag.Name):
 		log.Info("Starting Geth on pandora network...")
 
+	case ctx.GlobalIsSet(utils.AnchorFlag.Name):
+		log.Info("Starting Geth on anchor layer2 network...")
+
 	case ctx.GlobalIsSet(utils.TestnetFlag.Name):
 		log.Info("Starting Geth on testnet...")
 
@@ -300,7 +306,8 @@ func prepare(ctx *cli.Context) {
 		// Make sure we're not on any supported preconfigured testnet either
 		if !ctx.GlobalIsSet(utils.TestnetFlag.Name) &&
 			!ctx.GlobalIsSet(utils.DeveloperFlag.Name) &&
-			!ctx.GlobalIsSet(utils.PandoraFlag.Name) {
+			!ctx.GlobalIsSet(utils.PandoraFlag.Name) &&
+			!ctx.GlobalIsSet(utils.AnchorFlag.Name) {
 			// Nope, we're really on mainnet. Bump that cache up!
 			log.Info("Bumping default cache on mainnet", "provided", ctx.GlobalInt(utils.CacheFlag.Name), "updated", 4096)
 			ctx.GlobalSet(utils.CacheFlag.Name, strconv.Itoa(4096))

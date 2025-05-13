@@ -73,7 +73,7 @@ func (s *PublicEthereumAPI) GasPrice(ctx context.Context) (*hexutil.Big, error) 
 		return nil, err
 	}
 	if head := s.b.CurrentHeader(); head.BaseFee != nil {
-		//取最大值
+		//use max
 		tipcap = math.BigMax(tipcap, head.BaseFee)
 		//tipcap.Add(tipcap, head.BaseFee)
 	}
@@ -87,7 +87,7 @@ func (s *PublicEthereumAPI) MaxPriorityFeePerGas(ctx context.Context) (*hexutil.
 		return nil, err
 	}
 	if head := s.b.CurrentHeader(); head.BaseFee != nil {
-		//取最大值
+		//use max
 		//tipcap = math.BigMax(tipcap, head.BaseFee)
 		tipcap.Add(tipcap, head.BaseFee)
 	}
@@ -856,6 +856,15 @@ func (s *PublicBlockChainAPI) GetStorageAt(ctx context.Context, address common.A
 		return nil, err
 	}
 	res := state.GetState(address, common.HexToHash(key))
+	return res[:], state.Error()
+}
+
+func (s *PublicBlockChainAPI) GetRawStorageAt(ctx context.Context, address common.Address, key string, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
+	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+	if state == nil || err != nil {
+		return nil, err
+	}
+	res := state.GetRawState(address, common.HexToHash(key))
 	return res[:], state.Error()
 }
 
@@ -2177,7 +2186,7 @@ func isBlackAddress(addr common.Address, b Backend) (bool, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // cancel when we are finished consuming integers
-	systemDaoABI, err := abi.JSON(strings.NewReader(systemcontracts.SystemDaoABI))
+	systemDaoABI, err := abi.JSON(strings.NewReader(systemcontracts.IsBlackAddressABI))
 	if err != nil {
 		panic(err)
 	}

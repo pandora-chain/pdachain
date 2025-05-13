@@ -10,6 +10,9 @@ import (
 
 const (
 	FarmMemberSlotPoolOf = 3
+
+	// FarmMemberSlotLastUpdateBlockOf only in anchor net use
+	FarmMemberSlotLastUpdateBlockOf = 6
 )
 
 type PoolInfo struct {

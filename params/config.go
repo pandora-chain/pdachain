@@ -113,6 +113,34 @@ var (
 		},
 	}
 
+	AnchorNetChainConfig = &ChainConfig{
+		ChainID:             big.NewInt(250101),
+		HomesteadBlock:      big.NewInt(0),
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		RamanujanBlock:      big.NewInt(0),
+		NielsBlock:          big.NewInt(0),
+		MirrorSyncBlock:     big.NewInt(0),
+		BrunoBlock:          big.NewInt(0),
+		EulerBlock:          big.NewInt(0),
+		GibbsBlock:          big.NewInt(0),
+		NanoBlock:           big.NewInt(0),
+		MoranBlock:          big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		Anchor: &AnchorConfig{
+			Period:                    1,
+			Epoch:                     1000,
+			WaitingConfirmBlockNumber: 720,
+		},
+	}
+
 	DevNetChainConfig = &ChainConfig{
 		ChainID:             big.NewInt(1337),
 		HomesteadBlock:      big.NewInt(0),
@@ -145,17 +173,119 @@ var (
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllEthashProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), new(EthashConfig), nil, nil, nil}
+	AllEthashProtocolChanges = &ChainConfig{
+		big.NewInt(1337),
+		big.NewInt(0),
+		nil,
+		false,
+		big.NewInt(0),
+		common.Hash{},
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		nil,
+		nil,
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		new(EthashConfig),
+		nil,
+		nil,
+		nil,
+		nil,
+	}
 
 	// AllCliqueProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Clique consensus.
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, big.NewInt(0), nil, nil, nil, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, nil, nil}
+	AllCliqueProtocolChanges = &ChainConfig{
+		big.NewInt(1337),
+		big.NewInt(0),
+		nil,
+		false,
+		big.NewInt(0),
+		common.Hash{},
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		nil,
+		nil,
+		big.NewInt(0),
+		nil,
+		nil,
+		nil,
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		nil,
+		nil,
+		nil,
+		&CliqueConfig{Period: 0, Epoch: 30000},
+		nil,
+		nil,
+		nil,
+	}
 
-	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, new(EthashConfig), nil, nil, nil}
-	TestRules       = TestChainConfig.Rules(new(big.Int), false)
+	TestChainConfig = &ChainConfig{
+		big.NewInt(1),
+		big.NewInt(0),
+		nil,
+		false,
+		big.NewInt(0),
+		common.Hash{},
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		nil,
+		nil,
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		nil,
+		new(EthashConfig),
+		nil,
+		nil,
+		nil,
+		nil,
+	}
+	TestRules = TestChainConfig.Rules(new(big.Int), false)
 )
 
 // TrustedCheckpoint represents a set of post-processed trie roots (CHT and
@@ -254,6 +384,7 @@ type ChainConfig struct {
 	Ethash *EthashConfig `json:"ethash,omitempty" toml:",omitempty"`
 	Clique *CliqueConfig `json:"clique,omitempty" toml:",omitempty"`
 	Parlia *ParliaConfig `json:"parlia,omitempty" toml:",omitempty"`
+	Anchor *AnchorConfig `json:"anchor,omitempty" toml:",omitempty"`
 
 	GasPrice *big.Int `json:"GasPrice,omitempty"`
 }
@@ -290,6 +421,28 @@ func (b *ParliaConfig) String() string {
 	return "parlia"
 }
 
+type AnchorConfig struct {
+	Period                    uint64         `json:"period"` // Number of seconds between blocks to enforce
+	Epoch                     uint64         `json:"epoch"`  // Epoch length to update validatorSet
+	ForkBlockNumber           uint64         `json:"forkBlockNumber"`
+	IPCPath                   string         `json:"ipcPath"`
+	WaitingConfirmBlockNumber uint64         `json:"anchorConfirmBlockNumber"`
+	GenesisAddress            common.Address `json:"genesisAddress"`
+	ManagerAddress            common.Address `json:"genesisAddress"`
+}
+
+func (b *AnchorConfig) String() string {
+	return "anchor"
+}
+
+func (b *AnchorConfig) ConfirmVersionBlockNumber(blockNumber uint64) uint64 {
+	return b.ForkBlockNumber + blockNumber + b.WaitingConfirmBlockNumber
+}
+
+func (b *AnchorConfig) AnchorBlockNumber(blockNumber uint64) uint64 {
+	return b.ForkBlockNumber + blockNumber
+}
+
 // String implements the fmt.Stringer interface.
 func (c *ChainConfig) String() string {
 	var engine interface{}
@@ -300,6 +453,8 @@ func (c *ChainConfig) String() string {
 		engine = c.Clique
 	case c.Parlia != nil:
 		engine = c.Parlia
+	case c.Anchor != nil:
+		engine = c.Anchor
 	default:
 		engine = "unknown"
 	}
@@ -643,7 +798,6 @@ func (c *ChainConfig) IsOnValidatorActivityForkBlock(num *big.Int) bool {
 }
 
 func (c *ChainConfig) GetCommunitySwapBlock() *big.Int {
-
 	switch c.ChainID.String() {
 	case "1337":
 		return big.NewInt(CommunitySwapBlockDev)
@@ -654,7 +808,6 @@ func (c *ChainConfig) GetCommunitySwapBlock() *big.Int {
 	default:
 		return big.NewInt(CommunitySwapBlockMain)
 	}
-
 }
 
 func (c *ChainConfig) GetValidatorBlock() *big.Int {

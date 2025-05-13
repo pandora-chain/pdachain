@@ -18,8 +18,13 @@ package vm
 
 import (
 	"bytes"
+	"context"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/systemcontracts"
+	"github.com/ethereum/go-ethereum/rpc"
 	"golang.org/x/crypto/sha3"
+	"math"
 	"math/big"
 	"strings"
 	"sync"
@@ -140,6 +145,8 @@ type EVM struct {
 	// available gas is calculated in gasCall* according to the 63/64 rule and later
 	// applied in opCall*.
 	callGasTemp uint64
+
+	treeABI abi.ABI
 }
 
 // NewEVM returns a new EVM. The returned EVM is not thread safe and should
@@ -156,8 +163,29 @@ func NewEVM(blockCtx BlockContext, txCtx TxContext, statedb StateDB, chainConfig
 	evm.callGasTemp = 0
 	evm.depth = 0
 
+	abi, err := abi.JSON(strings.NewReader(`[{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"versionOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"childrenOf","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"}]`))
+	if err != nil {
+		panic(err)
+	}
+	evm.treeABI = abi
+
 	evm.interpreter = NewEVMInterpreter(evm, config)
 	return evm
+}
+
+func (evm *EVM) IsAnchorEVM() bool {
+	return evm.chainConfig.Anchor != nil && len(evm.chainConfig.Anchor.IPCPath) > 0
+}
+
+func (evm *EVM) DialAnchorContext() *rpc.Client {
+	if !evm.IsAnchorEVM() {
+		panic("not in Anchor Network do not call this func to create RPC Client")
+	}
+	c, err := rpc.DialContext(context.TODO(), evm.chainConfig.Anchor.IPCPath)
+	if err != nil {
+		panic(err)
+	}
+	return c
 }
 
 // Reset resets the EVM with a new transaction context.Reset
@@ -568,10 +596,11 @@ func (evm *EVM) ChainConfig() *params.ChainConfig { return evm.chainConfig }
 
 func (evm *EVM) callHook(caller ContractRef, addr common.Address, input []byte, gas uint64, hooked *bool) (ret []byte, leftOverGas uint64, err error) {
 	// Special handling
-	// `function holderRangeInfoOf(address token,uint64 rangeIndex)` in contract 0xC
-	// `function holderRangeAccRewardPerShare(address,uint64)` in contract 0xC
-	// `function childrenOf(address owner)` in contract 0xA
-	// `function childrenHoldAmount(address,address)` in contract 0xC
+	// `function holderRangeInfoOf(address token,uint64 rangeIndex)` in contract 0xC '0e603a1c'
+	// `function holderRangeAccRewardPerShare(address,uint64)` in contract 0xC '24fc55d9'
+	// `function childrenOf(address owner)` in contract 0xA '42c4c0d0'
+	// `function childrenHoldAmount(address,address)` in contract 0xC 'e8b23ad8'
+
 	if addr == common.HexToAddress(systemcontracts.FarmContract) && len(input) >= 4 {
 		if strings.EqualFold(common.Bytes2Hex(input[0:4]), "0e603a1c") && len(input) == 68 {
 			tokenContract := common.BytesToAddress(input[4:36])
@@ -595,12 +624,81 @@ func (evm *EVM) callHook(caller ContractRef, addr common.Address, input []byte, 
 			return evm.childrenHoldAmount(poolAddress, parentAddress, gas)
 		}
 
-	} else if addr == common.HexToAddress(systemcontracts.AddressTreeContract) && len(input) >= 4 {
+	} else if evm.chainConfig.Anchor == nil && addr == common.HexToAddress(systemcontracts.AddressTreeContract) && len(input) >= 4 {
 		if strings.EqualFold(common.Bytes2Hex(input[0:4]), "42c4c0d0") && len(input) == 36 {
 			parentAddress := common.BytesToAddress(input[4:36])
 			*hooked = true
 			return evm.childrenOf(parentAddress, gas)
 		}
+	} else if evm.chainConfig.Anchor != nil && evm.IsAnchorEVM() && addr == common.HexToAddress(systemcontracts.AddressTreeContract) && len(input) >= 4 {
+		*hooked = true
+		var result hexutil.Bytes
+
+		anchorRPC := evm.DialAnchorContext()
+		defer anchorRPC.Close()
+
+		callTx := map[string]interface{}{
+			"from": common.HexToAddress("0x0000000000000000000000000000000000000000"),
+			"to":   &addr,
+			"data": hexutil.Bytes(input),
+			"gas":  hexutil.Uint64(uint64(math.MaxUint64 / 2)),
+		}
+		err := anchorRPC.CallContext(context.TODO(), &result, "eth_call", callTx, "latest")
+		if err != nil {
+			return nil, gas - 20000, err
+		}
+
+		versionNumber := evm.chainConfig.Anchor.AnchorBlockNumber(evm.Context.BlockNumber.Uint64())
+
+		// call childrenOf
+		const childrenOfMethodName = "childrenOf"
+		if strings.EqualFold(common.Bytes2Hex(input[0:4]), "42c4c0d0") && len(input) == 36 {
+			var children []common.Address
+			if err := evm.treeABI.UnpackIntoInterface(&children, childrenOfMethodName, result); err != nil {
+				panic(err)
+			}
+
+			var childrenOfVersions []common.Address
+			for _, child := range children {
+				versionOfCallData, err := evm.treeABI.Pack("versionOf", child)
+				if err != nil {
+					panic(err)
+				}
+
+				versionCallTx := map[string]interface{}{
+					"from": child,
+					"to":   &addr,
+					"data": hexutil.Bytes(versionOfCallData),
+					"gas":  hexutil.Uint64(uint64(math.MaxUint64 / 2)),
+				}
+
+				var childVersionResult hexutil.Bytes
+				err = anchorRPC.CallContext(context.TODO(), &childVersionResult, "eth_call", versionCallTx, "latest")
+				if err != nil {
+					panic(err)
+				}
+
+				var childVersion *big.Int
+				err = evm.treeABI.UnpackIntoInterface(&childVersion, "versionOf", childVersionResult)
+				if err != nil {
+					panic(err)
+				}
+
+				if childVersion.Uint64() < versionNumber {
+					childrenOfVersions = append(childrenOfVersions, child)
+				} else {
+					break
+				}
+			}
+
+			result, err = evm.treeABI.Methods[childrenOfMethodName].Outputs.Pack(childrenOfVersions)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		*hooked = true
+		return result, 0, nil
 	}
 	*hooked = false
 	return []byte{}, 0, nil
@@ -722,7 +820,13 @@ func (evm *EVM) isContractCreator(caller common.Address) bool {
 	var slot common.Hash
 	harsher := sha3.NewLegacyKeccak256()
 	harsher.Write(common.LeftPadBytes(caller.Bytes(), 32))
-	harsher.Write(common.LeftPadBytes(common.IntToSlot(7).Bytes(), 32))
+
+	if evm.IsAnchorEVM() {
+		harsher.Write(common.LeftPadBytes(common.IntToSlot(5).Bytes(), 32))
+	} else {
+		harsher.Write(common.LeftPadBytes(common.IntToSlot(7).Bytes(), 32))
+	}
+
 	harsher.Sum(slot[:0])
 	harsher.Reset()
 

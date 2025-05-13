@@ -20,6 +20,7 @@ package eth
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/consensus/anchor"
 	"math/big"
 	"runtime"
 	"sync"
@@ -460,6 +461,9 @@ func (s *Ethereum) shouldPreserve(header *types.Header) bool {
 	if _, ok := s.engine.(*parlia.Parlia); ok {
 		return false
 	}
+	if _, ok := s.engine.(*anchor.Anchor); ok {
+		return false
+	}
 	return s.isLocalBlock(header)
 }
 
@@ -525,6 +529,14 @@ func (s *Ethereum) StartMining(threads int) error {
 			}
 
 			parlia.Authorize(eb, wallet.SignData, wallet.SignTx)
+		} else if anchor, ok := s.engine.(*anchor.Anchor); ok {
+			wallet, err := s.accountManager.Find(accounts.Account{Address: eb})
+			if wallet == nil || err != nil {
+				log.Error("Etherbase account unavailable locally", "err", err)
+				return fmt.Errorf("signer missing: %v", err)
+			}
+
+			anchor.Authorize(eb, wallet.SignData, wallet.SignTx, wallet.SignText)
 		}
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.

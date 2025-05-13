@@ -86,6 +86,7 @@ It expects the genesis file as argument.`,
 		ArgsUsage: "",
 		Flags: []cli.Flag{
 			utils.PandoraFlag,
+			utils.AnchorFlag,
 			utils.TestnetFlag,
 		},
 		Category: "BLOCKCHAIN COMMANDS",

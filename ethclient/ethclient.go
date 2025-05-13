@@ -401,6 +401,12 @@ func (ec *Client) StorageAt(ctx context.Context, account common.Address, key com
 	return result, err
 }
 
+func (ec *Client) RawStorageAt(ctx context.Context, account common.Address, key common.Hash, blockNumber *big.Int) ([]byte, error) {
+	var result hexutil.Bytes
+	err := ec.c.CallContext(ctx, &result, "eth_getRawStorageAt", account, key, toBlockNumArg(blockNumber))
+	return result, err
+}
+
 // CodeAt returns the contract code of the given account.
 // The block number can be nil, in which case the code is taken from the latest known block.
 func (ec *Client) CodeAt(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error) {

@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core/anchor_network"
 	"math/big"
 	"strings"
 
@@ -227,9 +228,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	// config is supplied. These chains would get AllProtocolChanges (and a compat error)
 	// if we just continued here.
 	// The full node of two testnets may run without genesis file after been inited.
-	//if genesis == nil && stored != params.MainnetGenesisHash {
-	//	return storedcfg, stored, nil
-	//}
+	if genesis == nil && stored != params.PDANetGenesisHash && stored != params.TestnetGenesisHash {
+		return storedcfg, stored, nil
+	}
 	// Check config compatibility and write the config. Compatibility errors
 	// are returned to the caller unless we're already at block zero.
 	height := rawdb.ReadHeaderNumber(db, rawdb.ReadHeadHeaderHash(db))
@@ -395,6 +396,42 @@ func DefaultTestNetGenesisBlock() *Genesis {
 			common.HexToAddress(systemcontracts.TestNetGenesisDeployerAddress): {Balance: new(big.Int).Mul(big.NewInt(10000000000-10), big.NewInt(params.Ether))},
 		},
 	}
+}
+
+func DefaultAnchorNetGenesisBlock(
+	forkBlockTimestamp uint64,
+	forkBlockHash common.Hash,
+	ipcPath string,
+	info anchor_network.AnchorNetworkInfo,
+) *Genesis {
+	var genesisBlock = &Genesis{
+		Config: params.AnchorNetChainConfig,
+		Nonce:  88,
+		ExtraData: hexutil.MustDecode("0x" +
+			"0000000000000000000000000000000000000000000000000000000000000000" +
+			info.GenesisAddress.Hex()[2:] +
+			forkBlockHash.Hex()[2:] +
+			"0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+		),
+		GasLimit:   15000000,
+		Difficulty: big.NewInt(1),
+		Timestamp:  forkBlockTimestamp,
+		Alloc: map[common.Address]GenesisAccount{
+			common.HexToAddress(systemcontracts.AddressTreeContract): {Balance: big.NewInt(0), Code: hexutil.MustDecode(systemcontracts.AnchorNetAddressTreeContractByteCode)},
+			common.HexToAddress(systemcontracts.SystemDaoContract):   {Balance: big.NewInt(0), Code: hexutil.MustDecode(systemcontracts.AnchorNetSystemDaoContractByteCode)},
+			common.HexToAddress(systemcontracts.FarmContract):        {Balance: big.NewInt(0), Code: hexutil.MustDecode(systemcontracts.AnchorNetFarmContractByteCode)},
+			common.HexToAddress(systemcontracts.AnchorContract):      {Balance: big.NewInt(0), Code: hexutil.MustDecode(systemcontracts.AnchorNetAnchorContractByteCode)},
+			info.ManagerAddress: {Balance: new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))},
+		},
+	}
+
+	genesisBlock.Config.ChainID = info.ChainID
+	genesisBlock.Config.Anchor.ForkBlockNumber = info.ForkBlockNumber.Uint64()
+	genesisBlock.Config.Anchor.IPCPath = ipcPath
+	genesisBlock.Config.Anchor.GenesisAddress = info.GenesisAddress
+	genesisBlock.Config.Anchor.ManagerAddress = info.ManagerAddress
+
+	return genesisBlock
 }
 
 // DeveloperGenesisBlock returns the 'geth --dev' genesis block.
