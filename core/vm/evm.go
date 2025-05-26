@@ -18,13 +18,12 @@ package vm
 
 import (
 	"bytes"
-	"context"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/systemcontracts"
-	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/ethereum/go-ethereum/core/systemcontracts/anchor"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"golang.org/x/crypto/sha3"
-	"math"
 	"math/big"
 	"strings"
 	"sync"
@@ -147,6 +146,7 @@ type EVM struct {
 	callGasTemp uint64
 
 	treeABI abi.ABI
+	cacheDB *ethdb.Database
 }
 
 // NewEVM returns a new EVM. The returned EVM is not thread safe and should
@@ -162,30 +162,23 @@ func NewEVM(blockCtx BlockContext, txCtx TxContext, statedb StateDB, chainConfig
 	evm.abort = 0
 	evm.callGasTemp = 0
 	evm.depth = 0
-
-	abi, err := abi.JSON(strings.NewReader(`[{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"versionOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"childrenOf","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"}]`))
-	if err != nil {
-		panic(err)
-	}
-	evm.treeABI = abi
-
 	evm.interpreter = NewEVMInterpreter(evm, config)
+
+	if chainConfig.Anchor != nil && chainConfig.Anchor.CacheDataBase != nil {
+		abi, err := abi.JSON(strings.NewReader(`[{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"versionOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"childrenOf","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"}]`))
+		if err != nil {
+			panic(err)
+		}
+
+		evm.treeABI = abi
+		evm.cacheDB = &chainConfig.Anchor.CacheDataBase
+	}
+
 	return evm
 }
 
 func (evm *EVM) IsAnchorEVM() bool {
-	return evm.chainConfig.Anchor != nil && len(evm.chainConfig.Anchor.IPCPath) > 0
-}
-
-func (evm *EVM) DialAnchorContext() *rpc.Client {
-	if !evm.IsAnchorEVM() {
-		panic("not in Anchor Network do not call this func to create RPC Client")
-	}
-	c, err := rpc.DialContext(context.TODO(), evm.chainConfig.Anchor.IPCPath)
-	if err != nil {
-		panic(err)
-	}
-	return c
+	return evm.chainConfig.Anchor != nil && evm.chainConfig.Anchor.CacheDataBase != nil && evm.cacheDB != nil
 }
 
 // Reset resets the EVM with a new transaction context.Reset
@@ -630,75 +623,46 @@ func (evm *EVM) callHook(caller ContractRef, addr common.Address, input []byte, 
 			*hooked = true
 			return evm.childrenOf(parentAddress, gas)
 		}
-	} else if evm.chainConfig.Anchor != nil && evm.IsAnchorEVM() && addr == common.HexToAddress(systemcontracts.AddressTreeContract) && len(input) >= 4 {
-		*hooked = true
+	} else if evm.chainConfig.Anchor != nil && evm.IsAnchorEVM() && addr == common.HexToAddress(systemcontracts.AddressTreeContract) && len(input) == 36 {
 		var result hexutil.Bytes
-
-		anchorRPC := evm.DialAnchorContext()
-		defer anchorRPC.Close()
-
-		callTx := map[string]interface{}{
-			"from": common.HexToAddress("0x0000000000000000000000000000000000000000"),
-			"to":   &addr,
-			"data": hexutil.Bytes(input),
-			"gas":  hexutil.Uint64(uint64(math.MaxUint64 / 2)),
-		}
-		err := anchorRPC.CallContext(context.TODO(), &result, "eth_call", callTx, "latest")
-		if err != nil {
-			return nil, gas - 20000, err
-		}
-
-		versionNumber := evm.chainConfig.Anchor.AnchorBlockNumber(evm.Context.BlockNumber.Uint64())
-
-		// call childrenOf
-		const childrenOfMethodName = "childrenOf"
-		if strings.EqualFold(common.Bytes2Hex(input[0:4]), "42c4c0d0") && len(input) == 36 {
-			var children []common.Address
-			if err := evm.treeABI.UnpackIntoInterface(&children, childrenOfMethodName, result); err != nil {
-				panic(err)
-			}
-
-			var childrenOfVersions []common.Address
-			for _, child := range children {
-				versionOfCallData, err := evm.treeABI.Pack("versionOf", child)
-				if err != nil {
-					panic(err)
-				}
-
-				versionCallTx := map[string]interface{}{
-					"from": child,
-					"to":   &addr,
-					"data": hexutil.Bytes(versionOfCallData),
-					"gas":  hexutil.Uint64(uint64(math.MaxUint64 / 2)),
-				}
-
-				var childVersionResult hexutil.Bytes
-				err = anchorRPC.CallContext(context.TODO(), &childVersionResult, "eth_call", versionCallTx, "latest")
-				if err != nil {
-					panic(err)
-				}
-
-				var childVersion *big.Int
-				err = evm.treeABI.UnpackIntoInterface(&childVersion, "versionOf", childVersionResult)
-				if err != nil {
-					panic(err)
-				}
-
-				if childVersion.Uint64() < versionNumber {
-					childrenOfVersions = append(childrenOfVersions, child)
-				} else {
-					break
-				}
-			}
-
-			result, err = evm.treeABI.Methods[childrenOfMethodName].Outputs.Pack(childrenOfVersions)
-			if err != nil {
-				panic(err)
-			}
-		}
-
+		account := common.BytesToAddress(input[4:36])
 		*hooked = true
-		return result, 0, nil
+		// Method ID
+		// 		depthOf:    7c3165b1
+		//  	parentOf:   ee08388e
+		//  	versionOf:  0db3ff45
+		//  	childrenOf: 42c4c0d0
+		switch common.Bytes2Hex(input[0:4]) {
+
+		case "7c3165b1":
+			// depthOf
+			result = evm.cacheStateDepthOf(account)
+			break
+
+		case "ee08388e":
+			// parentOf
+			result = evm.cacheStateParentOf(account)
+			break
+
+		case "0db3ff45":
+			// versionOf
+			result = evm.cacheStateVersionOf(account)
+			break
+
+		case "42c4c0d0":
+			// childrenOf
+			result = evm.cacheStateChildrenOf(account)
+			break
+
+		default:
+			*hooked = false
+		}
+
+		if *hooked {
+			return result, 0, nil
+		} else {
+			return []byte{}, 0, nil
+		}
 	}
 	*hooked = false
 	return []byte{}, 0, nil
@@ -726,7 +690,6 @@ func (evm *EVM) holderRangeAccRewardPerShare(pool common.Address, rewardToken co
 		if rIndex >= uint64(totalRangeCount) {
 			rIndex = uint64(totalRangeCount) - 1
 		}
-
 		ret := common.LeftPadBytes(rewardPerShareRaw[rIndex*24+0:rIndex*24+24], 32)
 		return ret, gas - 20000, nil
 	}
@@ -837,4 +800,58 @@ func (evm *EVM) isContractCreator(caller common.Address) bool {
 func (evm *EVM) isPrivateDeploymentMode() bool {
 	boolBytes := evm.StateDB.GetState(common.HexToAddress(systemcontracts.SystemDaoContract), common.BigToHash(big.NewInt(6)))
 	return common.StateToBig(boolBytes).Uint64() > 0
+}
+
+// //////////////////////////////////////////////////////////////////////////////////////
+// anchor network addressTree support methods
+// //////////////////////////////////////////////////////////////////////////////////////
+const (
+	AddressTreeContractSlotParentOf  = "0x0000000000000000000000000000000000000000000000000000000000000004"
+	AddressTreeContractSlotDepthOf   = "0x0000000000000000000000000000000000000000000000000000000000000005"
+	AddressTreeContractSlotVersionOf = "0x0000000000000000000000000000000000000000000000000000000000000006"
+)
+
+func (evm *EVM) cacheStateChildrenOf(account common.Address) []byte {
+	childrenRaw, err := (*evm.cacheDB).Get(anchor.ChildrenDBKey(account))
+	if err != nil {
+		emptyEncode := [][]byte{
+			common.LeftPadBytes(big.NewInt(32).Bytes(), 32),
+			common.LeftPadBytes(big.NewInt(0).Bytes(), 32),
+		}
+		return bytes.Join(emptyEncode, []byte{})
+	}
+	childrenLen := len(childrenRaw) / common.AddressLength
+	ret1 := [][]byte{
+		common.LeftPadBytes(big.NewInt(32).Bytes(), 32),
+		common.LeftPadBytes(big.NewInt(int64(childrenLen)).Bytes(), 32),
+	}
+	for i := 0; i < childrenLen; i++ {
+		ret1 = append(ret1, common.LeftPadBytes(childrenRaw[i*common.AddressLength:i*common.AddressLength+common.AddressLength], 32))
+	}
+
+	return bytes.Join(ret1, []byte{})
+}
+
+func (evm *EVM) cacheStateParentOf(account common.Address) []byte {
+	parentRaw, _ := (*evm.cacheDB).Get(anchor.ParentDBKey(account))
+	if parentRaw == nil {
+		return common.LeftPadBytes([]byte{}, 32)
+	}
+	return parentRaw
+}
+
+func (evm *EVM) cacheStateVersionOf(account common.Address) []byte {
+	versionRaw, _ := (*evm.cacheDB).Get(anchor.VersionDBKey(account))
+	if versionRaw == nil {
+		return common.BigToHash(big.NewInt(0)).Bytes()
+	}
+	return versionRaw
+}
+
+func (evm *EVM) cacheStateDepthOf(account common.Address) []byte {
+	depthRaw, _ := (*evm.cacheDB).Get(anchor.DepthDBKey(account))
+	if depthRaw == nil {
+		return common.BigToHash(big.NewInt(0)).Bytes()
+	}
+	return depthRaw
 }

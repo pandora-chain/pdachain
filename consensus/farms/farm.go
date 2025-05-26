@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/systemcontracts"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -29,7 +30,9 @@ type Farm struct {
 	farmABI             abi.ABI
 	transferABI         abi.ABI
 	rTransferValue      *big.Int
-	anchorClient        *ethclient.Client
+
+	anchorClient *ethclient.Client
+	cacheDB      *ethdb.Database
 }
 
 type DistributeRewardEvent struct {
@@ -45,7 +48,15 @@ type ERC20TransferEvent struct {
 	amount *big.Int
 }
 
-func NewFarm(state *state.StateDB, ethAPI *ethapi.PublicBlockChainAPI, farmContractAddress common.Address, addressTreeContractAddress common.Address, makeNodeValue *big.Int, anchorClient *ethclient.Client, treeVersionBlockNumber uint64) *Farm {
+func NewWithMainNet(state *state.StateDB, ethAPI *ethapi.PublicBlockChainAPI, farmContractAddress common.Address, addressTreeContractAddress common.Address, makeNodeValue *big.Int) *Farm {
+	return newFarm(state, ethAPI, farmContractAddress, addressTreeContractAddress, makeNodeValue, nil, 0, nil)
+}
+
+func NewWithAnchorNet(state *state.StateDB, ethAPI *ethapi.PublicBlockChainAPI, farmContractAddress common.Address, addressTreeContractAddress common.Address, anchorClient *ethclient.Client, treeVersionBlockNumber uint64, cacheDb *ethdb.Database) *Farm {
+	return newFarm(state, ethAPI, farmContractAddress, addressTreeContractAddress, big.NewInt(0), anchorClient, treeVersionBlockNumber, cacheDb)
+}
+
+func newFarm(state *state.StateDB, ethAPI *ethapi.PublicBlockChainAPI, farmContractAddress common.Address, addressTreeContractAddress common.Address, makeNodeValue *big.Int, anchorClient *ethclient.Client, treeVersionBlockNumber uint64, cacheDB *ethdb.Database) *Farm {
 
 	farmABI, err := abi.JSON(strings.NewReader(systemcontracts.FarmABI))
 	if err != nil {
@@ -61,7 +72,7 @@ func NewFarm(state *state.StateDB, ethAPI *ethapi.PublicBlockChainAPI, farmContr
 		makeNodeValue = new(big.Int).Mul(big.NewInt(DefaultMakeRelationTransferValue), big.NewInt(params.Ether))
 	}
 
-	addressTreeContract := contract.NewAddressTreeContract(state, addressTreeContractAddress, anchorClient, treeVersionBlockNumber)
+	addressTreeContract := contract.NewAddressTreeContract(state, cacheDB, addressTreeContractAddress, anchorClient, treeVersionBlockNumber)
 	farmContract := contract.NewFarmContract(state, farmContractAddress, anchorClient != nil)
 
 	farm := &Farm{
@@ -74,6 +85,7 @@ func NewFarm(state *state.StateDB, ethAPI *ethapi.PublicBlockChainAPI, farmContr
 		transferABI:         transferABI,
 		rTransferValue:      makeNodeValue,
 		anchorClient:        anchorClient,
+		cacheDB:             cacheDB,
 	}
 
 	return farm
@@ -179,7 +191,7 @@ func (f *Farm) FinalizeBlock(chain core.ChainContext, chainConfig *params.ChainC
 						return err
 					}
 				}
-			} else if isImportRelationCall && f.addressTreeContract.IsAddressAddedLog(l) && f.anchorClient == nil {
+			} else if isImportRelationCall && f.anchorClient == nil && f.addressTreeContract.IsAddressAddedLog(l) {
 				parent := common.BytesToAddress(l.Topics[1].Bytes())
 				child := common.BytesToAddress(l.Topics[2].Bytes())
 				_ = f.addressTreeContract.AppendChild(parent, child)
@@ -222,5 +234,10 @@ func (f *Farm) FinalizeBlock(chain core.ChainContext, chainConfig *params.ChainC
 	for _, dst := range poolHolderDistributions {
 		dst.Storage()
 	}
+
+	//if f.anchorClient != nil && f.cacheDB != nil {
+	//	(*f.cacheDB).
+	//}
+
 	return nil
 }

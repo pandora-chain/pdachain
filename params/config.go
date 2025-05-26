@@ -19,6 +19,7 @@ package params
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -429,6 +430,7 @@ type AnchorConfig struct {
 	WaitingConfirmBlockNumber uint64         `json:"anchorConfirmBlockNumber"`
 	GenesisAddress            common.Address `json:"genesisAddress"`
 	ManagerAddress            common.Address `json:"genesisAddress"`
+	CacheDataBase             ethdb.Database
 }
 
 func (b *AnchorConfig) String() string {

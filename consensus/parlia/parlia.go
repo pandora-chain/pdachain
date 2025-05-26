@@ -786,14 +786,12 @@ func (p *Parlia) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 		rTransferValue = big.NewInt(0)
 	}
 
-	farm := farms.NewFarm(
+	farm := farms.NewWithMainNet(
 		state,
 		p.ethAPI,
 		common.HexToAddress(systemcontracts.FarmContract),
 		common.HexToAddress(systemcontracts.AddressTreeContract),
 		rTransferValue,
-		nil,
-		0,
 	)
 	if err := farm.FinalizeBlock(cx, p.chainConfig, header, txs, receipts, isParlia0815ForkBlockHeader(p, header)); err != nil {
 		return err
@@ -894,14 +892,12 @@ func (p *Parlia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 		rTransferValue = big.NewInt(0)
 	}
 
-	farm := farms.NewFarm(
+	farm := farms.NewWithMainNet(
 		state,
 		p.ethAPI,
 		common.HexToAddress(systemcontracts.FarmContract),
 		common.HexToAddress(systemcontracts.AddressTreeContract),
 		rTransferValue,
-		nil,
-		0,
 	)
 
 	if err := farm.FinalizeBlock(cx, p.chainConfig, header, &txs, &receipts, isParlia0815ForkBlockHeader(p, header)); err != nil {

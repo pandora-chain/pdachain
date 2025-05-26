@@ -1833,7 +1833,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		}
 
 		cfg.NetworkId = info.ChainID.Uint64()
-		cfg.Genesis = core.DefaultAnchorNetGenesisBlock(forkBlock.Time(), forkBlock.Hash(), ctx.GlobalString(AnchorIPCPathFlag.Name), info)
+		cfg.Genesis = core.DefaultAnchorNetGenesisBlock(stack, forkBlock.Time(), forkBlock.Hash(), ctx.GlobalString(AnchorIPCPathFlag.Name), info)
 
 	case ctx.GlobalBool(DeveloperFlag.Name):
 		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {

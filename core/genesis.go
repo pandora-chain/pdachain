@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/anchor_network"
+	"github.com/ethereum/go-ethereum/node"
 	"math/big"
 	"strings"
 
@@ -399,12 +400,13 @@ func DefaultTestNetGenesisBlock() *Genesis {
 }
 
 func DefaultAnchorNetGenesisBlock(
+	stack *node.Node,
 	forkBlockTimestamp uint64,
 	forkBlockHash common.Hash,
 	ipcPath string,
 	info anchor_network.AnchorNetworkInfo,
 ) *Genesis {
-	var genesisBlock = &Genesis{
+	var genesis = &Genesis{
 		Config: params.AnchorNetChainConfig,
 		Nonce:  88,
 		ExtraData: hexutil.MustDecode("0x" +
@@ -425,13 +427,21 @@ func DefaultAnchorNetGenesisBlock(
 		},
 	}
 
-	genesisBlock.Config.ChainID = info.ChainID
-	genesisBlock.Config.Anchor.ForkBlockNumber = info.ForkBlockNumber.Uint64()
-	genesisBlock.Config.Anchor.IPCPath = ipcPath
-	genesisBlock.Config.Anchor.GenesisAddress = info.GenesisAddress
-	genesisBlock.Config.Anchor.ManagerAddress = info.ManagerAddress
+	//stack.ResolvePath("maindate")
+	cacheDBPath := stack.ResolvePath("cachedate")
+	rdb, err := rawdb.NewLevelDBDatabase(cacheDBPath, 0, 0, "eth/db/cache_data/", false)
+	if err != nil {
+		panic(err)
+	}
 
-	return genesisBlock
+	genesis.Config.ChainID = info.ChainID
+	genesis.Config.Anchor.ForkBlockNumber = info.ForkBlockNumber.Uint64()
+	genesis.Config.Anchor.IPCPath = ipcPath
+	genesis.Config.Anchor.GenesisAddress = info.GenesisAddress
+	genesis.Config.Anchor.ManagerAddress = info.ManagerAddress
+	genesis.Config.Anchor.CacheDataBase = rdb
+
+	return genesis
 }
 
 // DeveloperGenesisBlock returns the 'geth --dev' genesis block.

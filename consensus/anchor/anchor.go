@@ -217,6 +217,26 @@ type Anchor struct {
 	anchorContract *L2AnchorContract
 }
 
+/**
+sdb := state.NewDatabase(db)
+	statedb, _ := state.New(common.Hash{}, sdb, nil)
+	for addr, a := range accounts {
+		statedb.SetCode(addr, a.Code)
+		statedb.SetNonce(addr, a.Nonce)
+		statedb.SetBalance(addr, a.Balance)
+		for k, v := range a.Storage {
+			statedb.SetState(addr, k, v)
+		}
+	}
+	// Commit and re-open to start with a clean state.
+	statedb.Finalise(false)
+	statedb.AccountsIntermediateRoot()
+	root, _, _ := statedb.Commit(nil)
+	statedb, _ = state.New(root, sdb, nil)
+	return statedb
+
+*/
+
 // New creates a Anchor consensus engine.
 func New(
 	chainConfig *params.ChainConfig,
@@ -224,11 +244,11 @@ func New(
 	ethAPI *ethapi.PublicBlockChainAPI,
 	genesisHash common.Hash,
 ) *Anchor {
+
 	client, err := ethclient.Dial(chainConfig.Anchor.IPCPath)
 	if err != nil {
 		panic(err)
 	}
-
 	// get parlia config
 	anchorConfig := chainConfig.Anchor
 
@@ -641,6 +661,7 @@ func (p *Anchor) verifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
 // header for running the transactions on top.
 func (p *Anchor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) error {
+
 	header.Coinbase = p.val
 	header.Nonce = types.BlockNonce{}
 	number := header.Number.Uint64()
@@ -805,18 +826,20 @@ func (p *Anchor) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 		return errors.New("handleAnchorTokenExchange transaction failed")
 	}
 
+	snapID := state.Snapshot()
 	// handle farm
-	farm := farms.NewFarm(
+	farm := farms.NewWithAnchorNet(
 		state,
 		p.ethAPI,
 		common.HexToAddress(systemcontracts.FarmContract),
 		common.HexToAddress(systemcontracts.AddressTreeContract),
-		big.NewInt(0),
 		p.mainIPC,
 		p.config.AnchorBlockNumber(header.Number.Uint64()),
+		&p.chainConfig.Anchor.CacheDataBase,
 	)
 
 	if err := farm.FinalizeBlock(cx, p.chainConfig, header, txs, receipts, true); err != nil {
+		state.RevertToSnapshot(snapID)
 		return err
 	}
 
@@ -907,18 +930,21 @@ func (p *Anchor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 		return nil, nil, errors.New("handleAnchorTokenExchange transaction failed")
 	}
 
+	snapID := state.Snapshot()
+
 	// handle farm
-	farm := farms.NewFarm(
+	farm := farms.NewWithAnchorNet(
 		state,
 		p.ethAPI,
 		common.HexToAddress(systemcontracts.FarmContract),
 		common.HexToAddress(systemcontracts.AddressTreeContract),
-		big.NewInt(0),
 		p.mainIPC,
 		p.config.AnchorBlockNumber(header.Number.Uint64()),
+		&p.chainConfig.Anchor.CacheDataBase,
 	)
 
 	if err := farm.FinalizeBlock(cx, p.chainConfig, header, &txs, &receipts, true); err != nil {
+		state.RevertToSnapshot(snapID)
 		return nil, nil, err
 	}
 
