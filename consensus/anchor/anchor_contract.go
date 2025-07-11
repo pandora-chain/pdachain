@@ -194,7 +194,7 @@ func (l2c *L2AnchorContract) l2BurnProofs(blockHash common.Hash, coinBase common
 	}
 
 	var prfs []L2BrunProof
-	for i := prfNonce.Uint64(); i < reqNonce.Uint64() && i < 32; i++ {
+	for i, j := prfNonce.Uint64(), 0; i < reqNonce.Uint64() && j < 8; i, j = i+1, j+1 {
 		brunReq, err := l2c.l2BurnTransaction(blockHash, i)
 		if err != nil {
 			return nil, err
