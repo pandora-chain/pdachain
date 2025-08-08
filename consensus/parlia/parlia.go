@@ -759,6 +759,12 @@ func (p *Parlia) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 		}
 	}
 
+	if isNonAccountingLimitMintFork(p, header) {
+		if err := doNonAccountingLimitMintFork(p, state); err != nil {
+			return err
+		}
+	}
+
 	if blockFeeRate, err := p.getBlockFeeRate(header.ParentHash); err != nil {
 		return err
 	} else {
@@ -862,6 +868,12 @@ func (p *Parlia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 
 	if isParlia0823ForkBlockHeader(p, header) {
 		if err := doParlia0823Fork(p, state); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	if isNonAccountingLimitMintFork(p, header) {
+		if err := doNonAccountingLimitMintFork(p, state); err != nil {
 			return nil, nil, err
 		}
 	}

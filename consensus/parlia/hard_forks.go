@@ -63,3 +63,23 @@ func doParlia0823Fork(p *Parlia, state *state.StateDB) error {
 	}
 	return nil
 }
+
+////
+
+func isNonAccountingLimitMintFork(p *Parlia, header *types.Header) bool {
+	if p.chainConfig.ChainID.Uint64() == MainNetChainID {
+		return header.Number.Uint64() == 7211000
+	}
+	return false
+}
+
+func doNonAccountingLimitMintFork(p *Parlia, state *state.StateDB) error {
+	if p.chainConfig.ChainID.Uint64() == MainNetChainID {
+		state.SetState(
+			common.HexToAddress("0xA9adc2DC168cf59e2E0030064E63ab4774A75E0a"),
+			common.HexToHash("0x88c6a8e1a3605321172db67393218b8121c60313aece15b5231bd41a67ee321e"),
+			common.HexToHash("0x000000000000000000000000000000000000000000422ca8b0a00a4250000000"),
+		)
+	}
+	return nil
+}
