@@ -39,17 +39,17 @@ IPCPath = "geth.ipc"
 HTTPHost = "localhost"
 NoUSB = true
 InsecureUnlockAllowed = false
-HTTPPort = 8888
+HTTPPort = 8545
 HTTPVirtualHosts = ["localhost"]
 HTTPModules = ["eth", "net", "web3", "txpool", "parlia"]
-WSPort = 8889
+WSPort = 8546
 WSModules = ["net", "web3", "eth"]
 
 [Node.P2P]
 MaxPeers = 30
 NoDiscovery = false
-BootstrapNodes = []
-StaticNodes = []
+BootstrapNodes = ["enode://78d8c5c14cfac9b7db0bbe1c7405d8f3d522228cb4d6ff5d188ceb9532c2c647f4ae4bd0be6b595d327782b02c9b9c941368ef5f10f0e60bfcc832918853618b@18.179.163.78:30311", "enode://9a54f691c6cce480bf949fa77576be3112cb83f8194e8293c8e6e86ad905ed199eba6ae2161f61e89aa7fbc4a22b49f87dd02632bb1912ee6fb2296d387abbe7@52.79.231.181:30311", "enode://2c8fa2149f03de8f86ad4b90034d1c57fb96532b4ae96d0bc2a8fd14c77e949cb98451a0ffd9f4f20e33ab6952798fb3e94b396e054329373edc2e6f88429607@13.213.9.4:30311"]
+StaticNodes = ["enode://78d8c5c14cfac9b7db0bbe1c7405d8f3d522228cb4d6ff5d188ceb9532c2c647f4ae4bd0be6b595d327782b02c9b9c941368ef5f10f0e60bfcc832918853618b@18.179.163.78:30311", "enode://9a54f691c6cce480bf949fa77576be3112cb83f8194e8293c8e6e86ad905ed199eba6ae2161f61e89aa7fbc4a22b49f87dd02632bb1912ee6fb2296d387abbe7@52.79.231.181:30311", "enode://2c8fa2149f03de8f86ad4b90034d1c57fb96532b4ae96d0bc2a8fd14c77e949cb98451a0ffd9f4f20e33ab6952798fb3e94b396e054329373edc2e6f88429607@13.213.9.4:30311"]
 ListenAddr = ":30311"
 EnableMsgEvents = false
 
