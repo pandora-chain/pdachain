@@ -118,6 +118,15 @@ func newTokenHolderDistribution(state *state.StateDB, ethAPI *ethapi.PublicBlock
 	return r
 }
 
+func (d *PoolDistribution) powerInitialized(header *types.Header, owner common.Address, amount *big.Int) error {
+	if owner != common.HexToAddress(NullAddress) && owner != common.HexToAddress(BurnAddress) && d.state.GetCodeSize(owner) == 0 {
+		if err := d.updateAccountBalance(header, owner, big.NewInt(0), amount); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (d *PoolDistribution) putTransferEventLog(header *types.Header, blockHash common.Hash, from common.Address, to common.Address, amount *big.Int) error {
 
 	if from == to {

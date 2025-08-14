@@ -170,7 +170,35 @@ func (f *Farm) FinalizeBlock(chain core.ChainContext, chainConfig *params.ChainC
 
 		// has transaction call address contract importRelation methods
 		isImportRelationCall := f.anchorClient == nil && f.addressTreeContract.IsImportTransaction(tx)
+
 		for _, l := range receipt.Logs {
+			// keccak256("PowerInitialized(address,uint256)")
+			// event PowerInitialized(
+			//        address indexed owner,
+			//        uint256 currentBalance
+			// );
+			// only in hera network
+			if f.anchorClient != nil && chainConfig.ChainID.Uint64() == 140706 && chainConfig.IsHeraPowerInitialized(header.Number) &&
+				l.Address == common.HexToAddress("0x6D08BB537515bceAd7f84830a4FAae80a757C319") &&
+				l.Topics[0] == common.HexToHash("0x65357744487cae621e78d1e3d6174ccb7a3f0b39cd1afe8259d1f4c2be3c879a") {
+
+				if p := poolInfos[l.Address]; p != nil {
+					if poolHolderDistributions[l.Address] == nil {
+						poolHolderDistributions[l.Address] = newTokenHolderDistribution(f.state, f.ethAPI, f.farmContract, f.addressTreeContract, l.Address, p, isFork0815, f.anchorClient)
+					}
+					dst := poolHolderDistributions[l.Address]
+
+					if err := dst.powerInitialized(
+						header,
+						common.BytesToAddress(l.Topics[1].Bytes()),
+						new(big.Int).SetBytes(l.Data),
+					); err != nil {
+						f.state.RevertToSnapshot(snap)
+						log.Warn("FarmHandleBlock - powerInitialized Error", "number", header.Number, "hash", header.Hash())
+						return err
+					}
+				}
+			}
 			// keccak256("Transfer(address,address,uint256)")
 			if l.Topics[0] == common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef") {
 				if p := poolInfos[l.Address]; p != nil {

@@ -115,26 +115,27 @@ var (
 	}
 
 	AnchorNetChainConfig = &ChainConfig{
-		ChainID:             big.NewInt(250101),
-		HomesteadBlock:      big.NewInt(0),
-		EIP150Block:         big.NewInt(0),
-		EIP155Block:         big.NewInt(0),
-		EIP158Block:         big.NewInt(0),
-		ByzantiumBlock:      big.NewInt(0),
-		ConstantinopleBlock: big.NewInt(0),
-		PetersburgBlock:     big.NewInt(0),
-		IstanbulBlock:       big.NewInt(0),
-		MuirGlacierBlock:    big.NewInt(0),
-		RamanujanBlock:      big.NewInt(0),
-		NielsBlock:          big.NewInt(0),
-		MirrorSyncBlock:     big.NewInt(0),
-		BrunoBlock:          big.NewInt(0),
-		EulerBlock:          big.NewInt(0),
-		GibbsBlock:          big.NewInt(0),
-		NanoBlock:           big.NewInt(0),
-		MoranBlock:          big.NewInt(0),
-		BerlinBlock:         big.NewInt(0),
-		LondonBlock:         big.NewInt(0),
+		ChainID:               big.NewInt(250101),
+		HomesteadBlock:        big.NewInt(0),
+		EIP150Block:           big.NewInt(0),
+		EIP155Block:           big.NewInt(0),
+		EIP158Block:           big.NewInt(0),
+		ByzantiumBlock:        big.NewInt(0),
+		ConstantinopleBlock:   big.NewInt(0),
+		PetersburgBlock:       big.NewInt(0),
+		IstanbulBlock:         big.NewInt(0),
+		MuirGlacierBlock:      big.NewInt(0),
+		RamanujanBlock:        big.NewInt(0),
+		NielsBlock:            big.NewInt(0),
+		MirrorSyncBlock:       big.NewInt(0),
+		BrunoBlock:            big.NewInt(0),
+		EulerBlock:            big.NewInt(0),
+		GibbsBlock:            big.NewInt(0),
+		NanoBlock:             big.NewInt(0),
+		MoranBlock:            big.NewInt(0),
+		BerlinBlock:           big.NewInt(0),
+		LondonBlock:           big.NewInt(0),
+		PowerInitializedBlock: big.NewInt(1508800),
 		Anchor: &AnchorConfig{
 			Period:                    1,
 			Epoch:                     1000,
@@ -203,6 +204,7 @@ var (
 		big.NewInt(0),
 		big.NewInt(0),
 		big.NewInt(0),
+		big.NewInt(0),
 		new(EthashConfig),
 		nil,
 		nil,
@@ -244,6 +246,7 @@ var (
 		big.NewInt(0),
 		nil,
 		nil,
+		big.NewInt(0),
 		nil,
 		&CliqueConfig{Period: 0, Epoch: 30000},
 		nil,
@@ -280,6 +283,7 @@ var (
 		big.NewInt(0),
 		big.NewInt(0),
 		nil,
+		big.NewInt(0),
 		new(EthashConfig),
 		nil,
 		nil,
@@ -380,6 +384,8 @@ type ChainConfig struct {
 	GibbsBlock      *big.Int `json:"gibbsBlock,omitempty" toml:",omitempty"`      // gibbsBlock switch block (nil = no fork, 0 = already activated)
 	NanoBlock       *big.Int `json:"nanoBlock,omitempty" toml:",omitempty"`       // nanoBlock switch block (nil = no fork, 0 = already activated)
 	MoranBlock      *big.Int `json:"moranBlock,omitempty" toml:",omitempty"`      // moranBlock switch block (nil = no fork, 0 = already activated)
+
+	PowerInitializedBlock *big.Int `json:"powerInitializedBlock,omitempty" toml:",omitempty"` // moranBlock switch block (nil = no fork, 0 = already activated)
 
 	// Various consensus engines
 	Ethash *EthashConfig `json:"ethash,omitempty" toml:",omitempty"`
@@ -640,6 +646,14 @@ func (c *ChainConfig) IsMoran(num *big.Int) bool {
 
 func (c *ChainConfig) IsOnMoran(num *big.Int) bool {
 	return configNumEqual(c.MoranBlock, num)
+}
+
+func (c *ChainConfig) IsOnHeraInitialized(num *big.Int) bool {
+	return configNumEqual(c.PowerInitializedBlock, num)
+}
+
+func (c *ChainConfig) IsHeraPowerInitialized(num *big.Int) bool {
+	return isForked(c.PowerInitializedBlock, num)
 }
 
 // CheckCompatible checks whether scheduled fork transitions have been imported
