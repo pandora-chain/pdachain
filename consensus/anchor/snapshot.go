@@ -21,7 +21,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/ethereum/go-ethereum/log"
 	"math/big"
 	"sort"
 
@@ -143,7 +142,7 @@ func (s *Snapshot) isMajorityFork(forkHash string) bool {
 }
 
 func (s *Snapshot) apply(headers []*types.Header, chain consensus.ChainHeaderReader, parents []*types.Header,
-	chainId *big.Int, communitySwapFork *big.Int) (*Snapshot, error) {
+	chainId *big.Int) (*Snapshot, error) {
 	// Allow passing in no headers for cleaner code
 	if len(headers) == 0 {
 		return s, nil
@@ -189,42 +188,6 @@ func (s *Snapshot) apply(headers []*types.Header, chain consensus.ChainHeaderRea
 			}
 		}
 		snap.Recents[number] = validator
-		// change validator set
-		if isForked(communitySwapFork, header.Number) && number > 0 && number%s.config.Epoch == uint64(len(snap.Validators)/2) {
-			checkpointHeader := FindAncientHeader(header, uint64(len(snap.Validators)/2), chain, parents)
-			if checkpointHeader == nil {
-				return nil, consensus.ErrUnknownAncestor
-			}
-			log.Info("snap.communitySwapFork ", "number", number, "checkpoint number", checkpointHeader.Number)
-
-			validatorBytes := checkpointHeader.Extra[extraVanity : len(checkpointHeader.Extra)-extraSeal]
-			// get validators from headers and use that for new validator set
-			newValArr, err := ParseValidators(validatorBytes)
-			if err != nil {
-				return nil, err
-			}
-			newVals := make(map[common.Address]struct{}, len(newValArr))
-			for _, val := range newValArr {
-				newVals[val] = struct{}{}
-			}
-			oldLimit := len(snap.Validators)/2 + 1
-			newLimit := len(newVals)/2 + 1
-			if newLimit < oldLimit {
-				for i := 0; i < oldLimit-newLimit; i++ {
-					delete(snap.Recents, number-uint64(newLimit)-uint64(i))
-				}
-			}
-			oldLimit = len(snap.Validators)
-			newLimit = len(newVals)
-			if newLimit < oldLimit {
-				for i := 0; i < oldLimit-newLimit; i++ {
-					delete(snap.RecentForkHashes, number-uint64(newLimit)-uint64(i))
-				}
-			}
-			snap.Validators = newVals
-			log.Info("snap.Validators new ", "validators", snap.validators())
-
-		}
 		snap.RecentForkHashes[number] = hex.EncodeToString(header.Extra[extraVanity-nextForkHashSize : extraVanity])
 	}
 	snap.Number += uint64(len(headers))

@@ -572,7 +572,7 @@ func (p *Anchor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 		headers[i], headers[len(headers)-1-i] = headers[len(headers)-1-i], headers[i]
 	}
 
-	snap, err := snap.apply(headers, chain, parents, p.chainConfig.ChainID, p.chainConfig.GetCommunitySwapBlock())
+	snap, err := snap.apply(headers, chain, parents, p.chainConfig.ChainID)
 	if err != nil {
 		return nil, err
 	}
